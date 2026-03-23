@@ -1,0 +1,20 @@
+# Python
+_pycache_/
+*.pyc
+*.pyo
+*.pyd
+
+# Entornos virtuales
+venv/
+.env/
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+
+# Config sensible
+.env
+config.json
+
+# Datos del bot (MUY IMPORTANTE)
+data.json
