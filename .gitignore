@@ -16,4 +16,4 @@ Thumbs.db
 .env
 ###config.json
 # Datos del bot (MUY IMPORTANTE)
-###data.json
+data.json

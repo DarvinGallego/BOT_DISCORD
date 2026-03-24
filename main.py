@@ -149,7 +149,7 @@ def generate_leaderboard():
 
     text = "🏆 **Leaderboard**\n\n"
 
-    for i, (user_id, points) in enumerate(sorted_users[:10], start=1):
+    for i, (user_id, points) in enumerate(sorted_users, start=1):
         text += f"{i}. <@{user_id}> - {points} points\n"
 
     return text
