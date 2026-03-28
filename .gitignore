@@ -7,6 +7,7 @@ _pycache_/
 # Entornos virtuales
 venv/
 .env/
+.vscode/
 
 # Archivos de sistema
 .DS_Store
@@ -15,5 +16,12 @@ Thumbs.db
 # Config sensible
 .env
 ###config.json
+config_test.json
+
 # Datos del bot (MUY IMPORTANTE)
 data.json
+data_test.json
+data_copia.json
+
+generate_data_test.py
+migrate.py
