@@ -653,29 +653,48 @@ async def removeuser_error(ctx, error):
 
 # FUNCIONES
 async def handle_update_points(request):
+    # 1. CORS: Responder siempre a las peticiones 'OPTIONS' (el "preflight" del navegador)
+    if request.method == 'OPTIONS':
+        headers = {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        }
+        return web.Response(headers=headers, status=200)
+
+    # 2. Validación de Token
     token = request.headers.get('Authorization')
     if token != os.getenv("WEB_API_TOKEN"):
-        return web.Response(text="No autorizado", status=401)
+        return web.Response(text="No autorizado", status=401, headers={'Access-Control-Allow-Origin': '*'})
     
+    # 3. Procesamiento de datos
     try:
         data = await request.json()
-        
         for key, value in data.items():
             await set_config(key, value)
             
-        return web.Response(text="Configuración actualizada con éxito", status=200)
+        # IMPORTANTE: Incluir Access-Control-Allow-Origin en la respuesta de éxito
+        return web.Response(
+            text="Configuración actualizada con éxito", 
+            status=200, 
+            headers={'Access-Control-Allow-Origin': '*'}
+        )
     except Exception as e:
         print(f"Error procesando JSON: {e}")
-        return web.Response(text="Error en el formato", status=400)
+        return web.Response(
+            text="Error en el formato", 
+            status=400, 
+            headers={'Access-Control-Allow-Origin': '*'}
+        )
 
 async def start_web_server():
     app = web.Application()
     app.router.add_post('/api/guardar-tablas', handle_update_points)
+    app.router.add_options('/api/guardar-tablas', handle_update_points)
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', 8080) # Puerto 8080
+    site = web.TCPSite(runner, '0.0.0.0', 8080)
     await site.start()
-    print("Servidor web iniciado en puerto 8080")
 
 def parse_multiplier(value: str) -> float:
     value = value.strip()
