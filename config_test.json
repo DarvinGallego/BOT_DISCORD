@@ -1,0 +1,19 @@
+{
+    "channels": {
+        "attack_1": {"id": 1484681001866367016, "points": 5},
+        "attack_2": {"id": 1484681041242358062, "points": 6},
+        "attack_3": {"id": 1484681201204723985, "points": 8},
+        "attack_4": {"id": 1484681235728171240, "points": 10},
+        "attack_5": {"id": 1484681267613007883, "points": 15},
+
+        "defense_1": {"id": 1484681513411940502, "points": 11},
+        "defense_2": {"id": 1484681470722445412, "points": 16},
+        "defense_3": {"id": 1484681432977637559, "points": 19},
+        "defense_4": {"id": 1484681395438747808, "points": 21},
+        "defense_5": {"id": 1484682343737196829, "points": 25}
+    },
+    "leaderboard_channel_id": 1484681679355383991,
+    "nuggets_channel_id": 1490851921509089310,
+    "nuggets_bank_channel_id": 1490887297745551601,
+    "log_channel_id": 1484783683528425573
+}
