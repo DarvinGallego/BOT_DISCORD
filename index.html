@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de Configuración - Bot Leaderboard</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <link href="https://unpkg.com/tabulator-tables@5.5.0/dist/css/tabulator.min.css" rel="stylesheet">
+    <script type="text/javascript" src="https://unpkg.com/tabulator-tables@5.5.0/dist/js/tabulator.min.js"></script>
+
+    <style>
+        .tab-activa {
+            border-bottom: 4px solid #3b82f6;
+            color: #1d4ed8;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen p-6">
+
+    <div class="max-w-6xl mx-auto bg-white rounded-lg shadow-lg overflow-hidden">
+        
+        <div class="flex justify-between items-center bg-gray-800 text-white p-6">
+            <h1 class="text-2xl font-bold">Gestor de Variables de Combate</h1>
+            <button id="btn-guardar" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-6 rounded transition-colors shadow-md">
+                💾 Guardar Configuración en el Bot
+            </button>
+        </div>
+
+        <div class="border-b border-gray-200 bg-gray-50 flex overflow-x-auto whitespace-nowrap">
+            <button class="tab-btn tab-activa px-4 py-4 hover:bg-gray-200 transition" onclick="cambiarPestaña(1, this)">Ataque/Vic/Focus</button>
+            <button class="tab-btn px-4 py-4 hover:bg-gray-200 transition" onclick="cambiarPestaña(2, this)">Ataque/Vic/NoFocus</button>
+            <button class="tab-btn px-4 py-4 hover:bg-gray-200 transition" onclick="cambiarPestaña(3, this)">Ataque/Der/Focus</button>
+            <button class="tab-btn px-4 py-4 hover:bg-gray-200 transition" onclick="cambiarPestaña(4, this)">Ataque/Der/NoFocus</button>
+            <button class="tab-btn px-4 py-4 hover:bg-gray-200 transition" onclick="cambiarPestaña(5, this)">Defensa/Vic/Focus</button>
+            <button class="tab-btn px-4 py-4 hover:bg-gray-200 transition" onclick="cambiarPestaña(6, this)">Defensa/Vic/NoFocus</button>
+            <button class="tab-btn px-4 py-4 hover:bg-gray-200 transition" onclick="cambiarPestaña(7, this)">Defensa/Der/Focus</button>
+            <button class="tab-btn px-4 py-4 hover:bg-gray-200 transition" onclick="cambiarPestaña(8, this)">Defensa/Der/NoFocus</button>
+            <button class="tab-btn px-6 py-4 hover:bg-gray-200 transition text-purple-700 font-bold" onclick="cambiarPestaña(9, this)">⭐ Tipos de Combate</button>
+        </div>
+
+        <div class="p-6">
+            <h2 id="titulo-tabla" class="text-xl font-semibold mb-4 text-gray-700">Editando: Ataque + Victoria + Focus</h2>
+            <div id="mi-tabla-excel" class="w-full"></div>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. MEMORIA DE DATOS ---
+        const datosTablas = {};
+
+        function generarMatrizBase() {
+            return [
+                { id: "a1", aliados: "1 Aliado", e1: 0, e2: 0, e3: 0, e4: 0, e5: 0, e6: 0 },
+                { id: "a2", aliados: "2 Aliados", e1: 0, e2: 0, e3: 0, e4: 0, e5: 0, e6: 0 },
+                { id: "a3", aliados: "3 Aliados", e1: 0, e2: 0, e3: 0, e4: 0, e5: 0, e6: 0 },
+                { id: "a4", aliados: "4 Aliados", e1: 0, e2: 0, e3: 0, e4: 0, e5: 0, e6: 0 },
+                { id: "a5", aliados: "5 Aliados", e1: 0, e2: 0, e3: 0, e4: 0, e5: 0, e6: 0 }
+            ];
+        }
+
+        for (let i = 1; i <= 8; i++) { datosTablas[i] = generarMatrizBase(); }
+
+        datosTablas[9] = [
+            { id: "c1", condicion: "Ataque/Vic/Focus", prism: 0, perco: 0, ava: 0 },
+            { id: "c2", condicion: "Ataque/Vic/NoFocus", prism: 0, perco: 0, ava: 0 },
+            { id: "c3", condicion: "Ataque/Der/Focus", prism: 0, perco: 0, ava: 0 },
+            { id: "c4", condicion: "Ataque/Der/NoFocus", prism: 0, perco: 0, ava: 0 },
+            { id: "c5", condicion: "Defensa/Vic/Focus", prism: 0, perco: 0, ava: 0 },
+            { id: "c6", condicion: "Defensa/Vic/NoFocus", prism: 0, perco: 0, ava: 0 },
+            { id: "c7", condicion: "Defensa/Der/Focus", prism: 0, perco: 0, ava: 0 },
+            { id: "c8", condicion: "Defensa/Der/NoFocus", prism: 0, perco: 0, ava: 0 }
+        ];
+
+        let tablaActiva = null;
+        let pestañaActual = 1;
+
+        // --- 2. COLUMNAS VISUALES ---
+        const columnasBase = [
+            { title: "Aliados ↓ / Enemigos →", field: "aliados", width: 180, cssClass: "bg-gray-200 font-bold", headerSort: false },
+            { title: "0 Enemigo", field: "e1", editor: "number", headerSort: false, hozAlign: "center" },
+            { title: "1 Enemigos", field: "e2", editor: "number", headerSort: false, hozAlign: "center" },
+            { title: "2 Enemigos", field: "e3", editor: "number", headerSort: false, hozAlign: "center" },
+            { title: "3 Enemigos", field: "e4", editor: "number", headerSort: false, hozAlign: "center" },
+            { title: "4 Enemigos", field: "e5", editor: "number", headerSort: false, hozAlign: "center" },
+            { title: "5 Enemigos", field: "e6", editor: "number", headerSort: false, hozAlign: "center" }
+        ];
+
+        const columnasEspeciales = [
+            { title: "Condición", field: "condicion", width: 200, cssClass: "bg-gray-200 font-bold", headerSort: false },
+            { title: "Prisma", field: "prism", editor: "number", headerSort: false, hozAlign: "center" },
+            { title: "Perco", field: "perco", editor: "number", headerSort: false, hozAlign: "center" },
+            { title: "AvA", field: "ava", editor: "number", headerSort: false, hozAlign: "center" }
+        ];
+
+        // --- 3. DIBUJAR TABLA ---
+        function dibujarTabla(numeroPestaña) {
+            if (tablaActiva) {
+                datosTablas[pestañaActual] = tablaActiva.getData();
+                tablaActiva.destroy(); 
+            }
+            let columnasUsar = (numeroPestaña === 9) ? columnasEspeciales : columnasBase;
+            tablaActiva = new Tabulator("#mi-tabla-excel", {
+                data: datosTablas[numeroPestaña],
+                layout: "fitColumns",
+                columns: columnasUsar,
+            });
+            pestañaActual = numeroPestaña;
+        }
+
+        // --- 4. CAMBIAR PESTAÑA ---
+        const nombresPestañas = {
+            1: "Ataque + Victoria + Focus", 2: "Ataque + Victoria + No Focus",
+            3: "Ataque + Derrota + Focus", 4: "Ataque + Derrota + No Focus",
+            5: "Defensa + Victoria + Focus", 6: "Defensa + Victoria + No Focus",
+            7: "Defensa + Derrota + Focus", 8: "Defensa + Derrota + No Focus",
+            9: "Valores Extra: Prisma, Perco y AvA"
+        };
+
+        function cambiarPestaña(numero, elemento) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('tab-activa'));
+            elemento.classList.add('tab-activa');
+            document.getElementById('titulo-tabla').innerText = "Editando: " + nombresPestañas[numero];
+            dibujarTabla(numero);
+        }
+
+        window.onload = function() { dibujarTabla(1); };
+
+        // --- 5. ENVIAR AL BOT (BACKEND) ---
+        document.getElementById('btn-guardar').addEventListener('click', async function() {
+            if (tablaActiva) { datosTablas[pestañaActual] = tablaActiva.getData(); }
+            
+            const JSON_ParaElBot = {};
+            const sufijosCondicion = {
+                1: "ataque_victoria_focus", 2: "ataque_victoria_nofocus",
+                3: "ataque_derrota_focus", 4: "ataque_derrota_nofocus",
+                5: "defensa_victoria_focus", 6: "defensa_victoria_nofocus",
+                7: "defensa_derrota_focus", 8: "defensa_derrota_nofocus"
+            };
+
+            for (let i = 1; i <= 8; i++) {
+                const condicion = sufijosCondicion[i];
+                datosTablas[i].forEach(fila => {
+                    for (let e = 1; e <= 6; e++) {
+                        JSON_ParaElBot[`base_${condicion}_${fila.id}_e${e}`] = parseFloat(fila[`e${e}`]) || 0;
+                    }
+                });
+            }
+
+            const llavesCondicionOrdenadas = Object.values(sufijosCondicion); 
+            datosTablas[9].forEach((fila, index) => {
+                let condicion = llavesCondicionOrdenadas[index];
+                JSON_ParaElBot[`extra_prism_${condicion}`] = parseFloat(fila.prism) || 0;
+                JSON_ParaElBot[`extra_perco_${condicion}`] = parseFloat(fila.perco) || 0;
+                JSON_ParaElBot[`extra_ava_${condicion}`] = parseFloat(fila.ava) || 0;
+            });
+
+            console.log("Datos listos para enviar:", JSON_ParaElBot); // Para que lo veas en consola (F12)
+            const btn = document.getElementById('btn-guardar');
+            btn.innerText = "⏳ Guardando...";
+
+            try {
+                // AQUÍ: Reemplaza con la IP real cuando el backend esté listo
+                const respuesta = await fetch('http://IP_DE_TU_BOT:8080/api/guardar-tablas', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'UnTokenSecreto123'
+                    },
+                    body: JSON.stringify(JSON_ParaElBot)
+                });
+
+                if (respuesta.ok) { alert("✅ ¡Las 264 variables se actualizaron en el bot!"); } 
+                else { alert("❌ Error al comunicar con el bot."); }
+            } catch (error) {
+                console.error(error);
+                alert("❌ No se pudo conectar con el servidor (Asegúrate de cambiar IP_DE_TU_BOT en el código).");
+            } finally {
+                btn.innerText = "💾 Guardar Configuración en el Bot";
+            }
+        });
+    </script>
+</body>
+</html>

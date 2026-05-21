@@ -1,29 +1,64 @@
 import discord
+import re
 import json
 import aiosqlite
 import os
 import asyncio
+import aiohttp
 from discord.ext import commands
+from discord import app_commands
+from typing import Optional
 from datetime import datetime, timezone
 from dotenv import load_dotenv
+from aiohttp import web
 
 # CARGA DE ARCHIVOS
 load_dotenv()
-#"""
+"""
 with open('config.json', 'r') as f:
     config = json.load(f)
-#"""
 """
+#"""
 with open('config_test.json', 'r') as f:
     config = json.load(f)
-"""
+#"""
 
 # VARIABLES GLOBALES
+ENABLE_IMAGE_SYSTEM = False
 CHANNELS = config['channels']
 LEADERBOARD_CHANNEL = config['leaderboard_channel_id']
+
+GUILD_ID_TEST = 761276922059292713
+
 CHUNK_LINES = 30
 
 db = None
+
+DEFAULT_CONFIG_POINTS = {
+
+    #Allies
+    "allies_1": 1,
+    "allies_2": 2,
+    "allies_3": 3,
+    "allies_4": 4,
+    "allies_5": 5,
+
+    #Enemies
+    "enemies_1": 1,
+    "enemies_2": 2,
+    "enemies_3": 3,
+    "enemies_4": 4,
+    "enemies_5": 5,
+
+    #Others
+    "mode_attack": 10,
+    "mode_defense": 10,
+    "result_win": 10,
+    "result_lose": 10,
+    "type_Prisma": 10,
+    "type_AvA": 10,
+    "type_Perco": 10
+}
 
 # CONFIGURACION DEL BOT
 processed_messages = set()
@@ -38,6 +73,21 @@ bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
 # EVENTOS DE INICIO
 @bot.event
 async def on_ready():
+    await bot.wait_until_ready()
+
+    guild = discord.Object(id=GUILD_ID_TEST)
+
+    bot.tree.copy_global_to(guild=guild)
+    bot.tree.sync(guild=guild)
+
+    print("Slash commands synced")
+    print([cmd.name for cmd in bot.tree.get_commands()])
+
+    synced = await bot.tree.sync(guild=guild)
+    print("SYNCED: ",[cmd.name for cmd in synced])
+
+    await start_web_server()
+
     print(f'Bot conectado como {bot.user.name}')
 
 @bot.event
@@ -51,20 +101,71 @@ async def setup_hook():
 
     await create_tables()
     print("Tablas creadas")
+    await init_config()
+    print("Configuración inicializada")
+
+# CLASES
+class ConfirmView(discord.ui.View):
+    def __init__(self, author, timeout=60):
+        super().__init__(timeout=timeout)
+        self.author = author
+        self.value = None
+
+    # BOTONES
+    @discord.ui.button(label="Confirm", style=discord.ButtonStyle.green)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.value is not None:
+            return
+
+        if interaction.user != self.author:
+            await interaction.response.send_message("You cannot use this button.", ephemeral=True)
+            return
+
+        self.value = True
+
+        for item in self.children:
+            item.disabled = True
+
+        await interaction.message.edit(view=self)
+        self.stop()
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.red)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.value is not None:    
+            return
+
+        if interaction.user != self.author:
+            await interaction.response.send_message("You cannot use this button.", ephemeral=True)
+            return
+
+        self.value = False
+
+        for item in self.children:
+            item.disabled = True
+
+        await interaction.message.edit(view=self)
+        self.stop()
 
 # COMANDOS
-@bot.command()
+@bot.hybrid_command(name="hello", description="Say hello to the bot")
+@app_commands.default_permissions(administrator=True)
 async def hello(ctx):
-    await ctx.send('Hello, I am legendary bot!')
+    await ctx.reply('Hello, I am legendary bot!')
 
-@bot.command()
+@bot.hybrid_command(name="leaderboard", description="Reload leaderboard")
+@app_commands.default_permissions(administrator=True)
 @commands.has_permissions(administrator=True)
-async def reloadlb(ctx):
+async def leaderboard(ctx):
+    await ctx.defer()
     await update_leaderboard(ctx.guild)
     await ctx.send("Leaderboard reloaded")
+    print("Leaderboard reloaded")
 
-@bot.command()
+@bot.hybrid_command(name="points", description="See your points or another user's points")
+@app_commands.default_permissions(administrator=True)
 async def points(ctx, member: discord.Member = None):
+    await ctx.defer()
+
     if member is None:
         member = ctx.author
 
@@ -73,14 +174,19 @@ async def points(ctx, member: discord.Member = None):
 
     await ctx.send(f"{member.mention} have {points} points.")
 
-@bot.command()
+@bot.hybrid_command(name="addpoints", description="Add or remove points to a user")
+@app_commands.default_permissions(administrator=True)
 @commands.has_permissions(administrator=True)
 async def addpoints(ctx, member: discord.Member, amount: int):
+    await ctx.defer()
+
     user_id = str(member.id)
 
     await update_user_points(user_id, amount)
 
     new_total = await get_user_points(user_id)
+
+    await save_last_action("/addpoints", {"users": [str(member.id)], "points": amount})
 
     await send_log_points_edit(ctx.guild, ctx.author, member, amount, new_total)
 
@@ -91,25 +197,30 @@ async def addpoints(ctx, member: discord.Member, amount: int):
     else:
         await ctx.send(f"Removed {abs(amount)} points from {member.mention}")
 
-@bot.command()
+@bot.hybrid_command(name="resetpoints", description="Reset all points")
+@app_commands.default_permissions(administrator=True)
 @commands.has_permissions(administrator=True)
 async def resetpoints(ctx):
-    await ctx.send("⚠️ Are you sure? This will remove user from leaderboard (yes/no)")
+    await ctx.defer()
 
-    def check(m):
-        return (m.author == ctx.author and 
-                m.channel == ctx.channel and
-                m.content.lower() in ["yes", "no"])
+    embed = discord.Embed()
+    embed.title = "⚠️ Reset points"
+    embed.description = "Are you sure? This will remove ALL points from leaderboard"
+    embed.color = discord.Color.red()
+    embed.set_footer(text="you have 60 seconds to cancel")
 
-    try:
-        response = await bot.wait_for("message",timeout=30.0, check=check)
-    except asyncio.TimeoutError:
-        await ctx.send("⏰ Confirmation timed out. Action cancelled.")
+    confirmed, message = await confirm_action(ctx, embed)
+
+    if confirmed is None:
+        await update_embed(message, embed, "⏰ Confirmation timed out.", discord.Color.greyple())
         return
 
-    if response.content.lower() == "no":
-        await ctx.send("Points not reseted")
+    if confirmed is False:
+        await update_embed(message, embed, "❌ Operation canceled.", discord.Color.red())
         return
+    
+    if confirmed is True:
+        await update_embed(message, embed, "✅ Operation confirmed", discord.Color.green())
 
     await create_backups()
 
@@ -128,9 +239,12 @@ async def resetpoints(ctx):
 
     await send_log_reset(ctx.guild, ctx.author, user_count, total_points, old_leaderboard)
 
-@bot.command()
+@bot.hybrid_command(name="removeuser", description="Remove user from leaderboard")
+@app_commands.default_permissions(administrator=True)
 @commands.has_permissions(administrator=True)
 async def removeuser(ctx, member: discord.Member):
+    await ctx.defer()
+
     user_id = str(member.id)
     points = await get_user_points(user_id)
 
@@ -138,54 +252,61 @@ async def removeuser(ctx, member: discord.Member):
         await ctx.send(f"User {member.mention} not found in leaderboard")
         return
 
-    await ctx.send("⚠️ Are you sure? This will remove user from leaderboard (yes/no)")
+    embed = discord.Embed()
+    embed.title = "⚠️ Remove user"
+    embed.description = f"Are you sure? This will remove all data for {member.mention}"
+    embed.color = discord.Color.red()
+    embed.set_footer(text="you have 60 seconds to cancel")
 
-    def check(m):
-        return (m.author == ctx.author and 
-                m.channel == ctx.channel and
-                m.content.lower() in ["yes", "no"])
+    confirmed, message = await confirm_action(ctx, embed)
 
-    try:
-        response = await bot.wait_for("message",timeout=30.0, check=check)
-    except asyncio.TimeoutError:
-        await ctx.send("⏰ Confirmation timed out. Action cancelled.")
+    if confirmed is None:
+        await update_embed(message, embed, "⏰ Confirmation timed out.", discord.Color.greyple())
         return
 
-    if response.content.lower() == "no":
-        await ctx.send("User not removed from leaderboard")
+    if confirmed is False:
+        await update_embed(message, embed, "❌ Operation canceled.", discord.Color.red())
         return
+    
+    if confirmed is True:
+        await update_embed(message, embed, "✅ Operation confirmed", discord.Color.green())
 
-    total_points = points
+    await save_last_action("/removeuser", {"users": [str(member.id)], "points": points})
 
     await db.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
     await db.commit()
 
-    await ctx.send(f"User {member.mention} removed from leaderboard")
+    await ctx.reply(f"User {member.mention} removed from leaderboard")
 
     await update_leaderboard(ctx.guild)
 
-    await send_log_remove_user(ctx.guild, ctx.author, member, total_points)
+    await send_log_remove_user(ctx.guild, ctx.author, member, points)
 
-@bot.command()
+@bot.hybrid_command(name="modifyallpoints", description="Substract points from all users")
+@app_commands.default_permissions(administrator=True)
 @commands.has_permissions(administrator=True)
-async def weeklyreset(ctx, amount: int):
-    await ctx.send(f"⚠️ Are you sure? This will substract {amount} points from all users (yes/no)")
+async def modifyallpoints(ctx, amount: int):
+    await ctx.defer()
 
-    def check(m):
-        return (m.author == ctx.author and 
-                m.channel == ctx.channel and
-                m.content.lower() in ["yes", "no"])
+    embed = discord.Embed()
+    embed.title = "⚠️ Global points adjustment"
+    embed.description = "This will modify points from ALL users"
+    embed.add_field(name="Amount", value=amount, inline=False)
+    embed.color = discord.Color.orange()
+    embed.set_footer(text="you have 60 seconds to cancel")
 
-    try:
-        response = await bot.wait_for("message", timeout=30.0, check=check)
+    confirmed, message = await confirm_action(ctx, embed)
+
+    if confirmed is None:
+        await update_embed(message, embed, "⏰ Confirmation timed out.", discord.Color.greyple())
+        return
+
+    if confirmed is False:
+        await update_embed(message, embed, "❌ Operation canceled.", discord.Color.red())
+        return
     
-    except asyncio.timeoutError:
-        await ctx.send("⏰ Confirmation timed out. Action cancelled.")
-        return
-
-    if response.content.lower() == "no":
-        await ctx.send("Points not substracted")
-        return
+    if confirmed is True:
+        await update_embed(message, embed, "✅ Operation confirmed", discord.Color.green())
     
     await ctx.send(f"Substracted {amount} points from all users")
 
@@ -199,49 +320,115 @@ async def weeklyreset(ctx, amount: int):
 
     await update_leaderboard(ctx.guild)
 
-    await send_log_weekly_reset(ctx.guild, ctx.author, amount, user_count, total_points, old_leaderboard)
+    await send_log_modify_all_points(ctx.guild, ctx.author, amount, user_count, total_points, old_leaderboard)
 
-@bot.command()
+@bot.hybrid_command(name="undo", description="Undo last action")
+@app_commands.default_permissions(administrator=True)
 @commands.has_permissions(administrator=True)
-async def undoreset(ctx):
-    await ctx.send("⚠️ Restore previus leaderboard? (yes/no)")
+async def undo(ctx):
+    await ctx.defer()
 
-    def check(m):
-        return (m.author == ctx.author and 
-                m.channel == ctx.channel and
-                m.content.lower() in ["yes", "no"])
+    last = await get_last_action()
 
-    try:
-        response = await bot.wait_for("message",timeout=30.0, check=check)
-    except asyncio.TimeoutError:
-        await ctx.send("⏰ Confirmation timed out. Action cancelled.")
+    users = []
+    points = 0
+
+    if last is not None:
+        action_type = last["type"]
+
+        users =  last["data"]["users"]
+        points = last["data"]["points"]
+
+        if action_type == "/removeuser":
+            undo_type = "remove_user"
+            preview = (f"This will undo the last action: {last['type']}\n"
+                    f"• User affected: <@{users[0]}>\n"
+                    f"• Points returned: {points}")
+        else:
+            undo_type = "points_change"
+            preview = (f"This will undo the last action: {last['type']}\n"
+                    f"• Users affected: {len(users)}\n"
+                    f"• Points per user: {points}")
+    else:
+        undo_type = "last_backup"
+        preview = "Restore full leaderboard from last backup (global reset state)"
+
+    embed = discord.Embed()
+    embed.title = "⚠️ Undo last action"
+    embed.description = preview
+    embed.color = discord.Color.red()
+    embed.set_footer(text="you have 60 seconds to cancel")
+
+    confirmed, message = await confirm_action(ctx, embed)
+
+    if confirmed is None:
+        await update_embed(message, embed, "⏰ Confirmation timed out.", discord.Color.greyple())
         return
 
-    if response.content.lower() == "no":
-        await ctx.send("Previus leaderboard not restored")
-
-    success = await restore_backup()
-
-    if not success:
-        await ctx.send("❌ No backup available")
+    if confirmed is False:
+        await update_embed(message, embed, "❌ Operation canceled.", discord.Color.red())
         return
+    
+    if confirmed is True:
+        await update_embed(message, embed, "⌛ Reverting last action", discord.Color.orange())
+    
+    if undo_type == "points_change":
 
-    await update_leaderboard(ctx.guild)
+        for user_id in users:
+            await update_user_points(user_id, -points)
 
-    await ctx.send("✅ Previus leaderboard restored")
+        await clear_last_action()
+        await update_leaderboard(ctx.guild)
 
-@bot.command()
+        await update_embed(message, embed, "✅ Last action points undone", discord.Color.green())
+
+        await send_log_undo(ctx.guild, ctx.message, ctx.author, undo_type, {"users": users, "points": points})
+        return
+    
+    if undo_type == "remove_user":
+        user_id = users[0]
+
+        await update_user_points(user_id, points)
+
+        await clear_last_action()
+        await update_leaderboard(ctx.guild)
+
+        await update_embed(message, embed, "✅ Removed user restored", discord.Color.green())
+
+        await send_log_undo(ctx.guild, ctx.message, ctx.author, undo_type, {"users": users, "points": points})
+        return
+    
+    if undo_type == "last_backup":
+        success = await restore_backup()
+
+        if not success:
+            await update_embed(message, embed, "❌ No backups found.", discord.Color.red())
+            return
+
+        await update_leaderboard(ctx.guild)
+
+        await update_embed(message, embed, "✅ Leaderboard restored from backup", discord.Color.green())
+
+        await send_log_undo(ctx.guild, ctx.message, ctx.author, undo_type, None)
+
+@bot.hybrid_command(name="help", description="Bot help")
+@app_commands.default_permissions(administrator=True)
 async def help(ctx):
     is_admin = ctx.author.guild_permissions.administrator
 
-    embed = discord.Embed(title="📜 Bot help", description="Basic commands and usage", color=discord.Color.blue())
+    embed = discord.Embed(title="📜 Bot help", description="Leaderboard and battle points system", color=discord.Color.blue())
+
+    """
     embed.add_field(name="📸 How it works", value=("• Upload an image in a valid channel and\n"
                                                    "mention up to 5 users in the same message\n"
                                                    "• Admin approves with ✅ or rejects with ❌\n"
                                                    "• Points are assigned automatically in a scoreboard-channel"), inline=False)
-    embed.add_field(name="👤 Commands", value="!points @user → Check user points", inline=False)
+    embed.add_field(name="👤 Commands", value="/points @user → Check user points", inline=False)
+    """
 
     if is_admin:
+
+        """
         embed.add_field(name="ℹ️ Important", value=("• If you are an admin, only you see this message\n"
                                                     "• In the logs channel you can see all actions of the bot\n"
                                                     "• PLEASE check that the users are mentioned correctly.\n"
@@ -251,17 +438,165 @@ async def help(ctx):
                                                     "• Admin approves with ✅ or rejects with ❌\n"
                                                     "but if you use ✅ to approve and need revert this action\n"
                                                     "use ❌ in the same message to revert"), inline=False)
-        embed.add_field(name="👤 Admin commands", value="!addpoints @user amount → Add/Remove points\n"
-                                                        "!resetpoints → Reset leaderboard\n"
-                                                        "!removeuser @user → Remove user from leaderboard\n"
-                                                        "!reloadlb → Reload leaderboard\n"
-                                                        "!weeklyreset amount → Substract points from all users\n"
-                                                        "!undoreset → Restore previus leaderboard", inline=False)
+        """
+        admin_commands = [
+            "/points @user → Check user points",
+            "/leaderboard → Reload leaderboard",
+            "/addpoints @user amount → Add/Remove points",
+            "/removeuser @user → Remove user from leaderboard",
+            "/battlepoints → Calculate the points of a battle",
+            "/resetpoints → Reset leaderboard",
+            "/modifyallpoints amount → Substract points from all users",
+            "/undo → Undo last action"
+        ]
+
+        safety_notes =  [
+            "⚠️ Dangerous commands require confirmation",
+            "💾 Leaderboard resets create automatic backup",
+            "🔖 All admin actions are logged automatically",
+            "🔄 '/undo' can revert the lastest admin action"
+        ]
+
+        important_notes = [
+            "• Mention users correctly before approval",
+            "• Incorrect mentions may prevent points assignment",
+            "• Only administrators can use bot commands",
+            "• Logs channel stores bot audit history"
+        ]
+
+        embed.add_field(name="🛡️ Admin commands", value="\n".join(admin_commands), inline=False)
+        embed.add_field(name="🔄 Recovery & safety", value="\n".join(safety_notes), inline=False)
+        embed.add_field(name="ℹ️ Important notes", value="\n".join(important_notes), inline=False)
 
     await ctx.send(embed=embed)
 
+    if ctx.message:
+        await ctx.message.delete()
+
+@bot.hybrid_command(name="battlepoints", description="Calculate the points of a battle")
+@app_commands.default_permissions(administrator=True)
+@app_commands.choices(
+    mode=[app_commands.Choice(name="attack", value="attack"), 
+          app_commands.Choice(name="defense", value="defense")], 
+    results=[app_commands.Choice(name="win", value="win"), 
+             app_commands.Choice(name="lose", value="lose")], 
+    battle_type=[app_commands.Choice(name="Prisma", value="Prisma"), 
+                 app_commands.Choice(name="AvA", value="AvA"), 
+                 app_commands.Choice(name="Perco", value="Perco")])
+@commands.has_permissions(administrator=True)
+async def battlepoints(ctx, allies: int, enemies: int, mode: app_commands.Choice[str], results: app_commands.Choice[str], battle_type: app_commands.Choice[str], multiplier: str,
+                        member1: discord.Member, member2: Optional[discord.Member] = None, member3: Optional[discord.Member] = None, member4: Optional[discord.Member] = None, member5: Optional[discord.Member] = None):
+
+    members = [m for m in [member1, member2, member3, member4, member5] if m]
+    mode = mode.value
+    results = results.value
+    battle_type = battle_type.value
+
+    try:
+        multiplier = float(multiplier)
+    except ValueError:
+        return await ctx.send("❌ Invalid multiplier.")
+
+    if allies < 0 or enemies < 0:
+        return await ctx.send("❌ Invalid number of allies or enemies.")
+    
+    if allies > 5 or enemies > 5:
+        return await ctx.send("❌ Invalid number of allies or enemies.")
+
+    if mode not in ["attack", "defense"]:
+        return await ctx.send("❌ Invalid mode.")
+
+    if results not in ["win", "lose"]:
+        return await ctx.send("❌ Invalid results.")
+
+    if battle_type not in ["Prisma", "AvA", "Perco"]:
+        return await ctx.send("❌ Invalid battle type.")
+
+    if multiplier <= 0:
+        return await ctx.send("❌ Invalid multiplier.")
+
+    if not members:
+        return await ctx.send("❌ You must mention at least one user.")
+
+    base_points = await calculate_points(allies, enemies, mode, results, battle_type)
+    base_points = int(base_points) if base_points.is_integer() else base_points
+    total_points = float(base_points * multiplier)
+    total_points = int(total_points) if total_points.is_integer() else total_points
+
+    embed = discord.Embed(title="⚠️ Confirm points", description="Are you sure you want to assign these points?", color=discord.Color.orange())
+
+    embed.add_field(name="👤 Allies", value=f"{allies}", inline=True)
+    embed.add_field(name="👤 Enemies", value=f"{enemies}", inline=True)
+
+    embed.add_field(name="🛡️ Mode", value=mode.capitalize(), inline=True)
+    embed.add_field(name="⚔️ Result", value=results.capitalize(), inline=True)
+
+    embed.add_field(name="🏹 Battle type", value=battle_type, inline=True)
+    embed.add_field(name="🎉 Multiplier", value=f"{multiplier}", inline=True)
+
+    embed.add_field(name="👤 Users", value=f"{', '.join([member.mention for member in members])}", inline=False)
+    embed.add_field(name="🎉 Base points", value=f"{base_points}", inline=False)
+
+    embed.add_field(name="💰 Total points", value=f"**{total_points}**", inline=False)
+
+    embed.set_footer(text="You have 60 seconds to confirm")
+
+    confirmed, message = await confirm_action(ctx, embed)
+
+    if confirmed is None:
+        await update_embed(message, embed, "⏰ Confirmation timed out.", discord.Color.greyple())
+        return
+
+    if confirmed is False:
+        await update_embed(message, embed, "❌ Operation canceled.", discord.Color.red())
+        return
+    
+    if confirmed is True:
+        await update_embed(message, embed, "✅ Operation confirmed", discord.Color.green())
+
+    for member in members:
+        user_id = str(member.id)
+        await update_user_points(user_id, total_points)
+
+    await save_last_action("/battlepoints", {"users": [str(member.id) for member in members], "points": total_points})
+
+    await ctx.reply(f"✅ assigned {total_points} points to {', '.join([member.mention for member in members])}")
+
+    await log_battle_points(ctx.guild, ctx.message, ctx.author, members, base_points, multiplier, total_points, allies, enemies, mode, results, battle_type)
+
+    await update_leaderboard(ctx.guild)
+
+@bot.hybrid_command(name="configpoints", description="Modifies the values of /manualpoints command")
+@app_commands.default_permissions(administrator=True)
+@app_commands.choices(
+    key=[app_commands.Choice(name="allies 1", value="allies_1"),
+         app_commands.Choice(name="allies 2", value="allies_2"),
+         app_commands.Choice(name="allies 3", value="allies_3"),
+         app_commands.Choice(name="allies 4", value="allies_4"),
+         app_commands.Choice(name="allies 5", value="allies_5"),
+         app_commands.Choice(name="enemies 1", value="enemies_1"),
+         app_commands.Choice(name="enemies 2", value="enemies_2"),
+         app_commands.Choice(name="enemies 3", value="enemies_3"),
+         app_commands.Choice(name="enemies 4", value="enemies_4"),
+         app_commands.Choice(name="enemies 5", value="enemies_5"),
+         app_commands.Choice(name="attack", value="mode_attack"),
+         app_commands.Choice(name="defense", value="mode_defense"),
+         app_commands.Choice(name="win", value="result_win"),
+         app_commands.Choice(name="lose", value="result_lose"),
+         app_commands.Choice(name="Prisma", value="type_Prisma"),
+         app_commands.Choice(name="AvA", value="type_AvA"),
+         app_commands.Choice(name="Perco", value="type_Perco")]
+)
+@commands.has_permissions(administrator=True)
+async def configpoints(ctx, key: app_commands.Choice[str], value: str):
+    value = parse_multiplier(value)
+    key = key.value
+
+    await set_config(key, value)
+    await ctx.reply(f"✅ {key} updated to {value}")
+
 #COMANDOS DE DESARROLLADOR  
-@bot.command()
+@bot.command(name="setup", description="Developer command: Setup the bot")
 @commands.has_permissions(administrator=True)
 async def setup(ctx):
     embed = discord.Embed(title="📸 Image point system", description="Welcome! Here's how the system works:", color=discord.Color.blue())
@@ -280,9 +615,9 @@ async def setup(ctx):
 
     await ctx.message.delete()
 
-@bot.command()
+@bot.command(name="usersbackup", description="Developer command: Backup users data")
 @commands.has_permissions(administrator=True)
-async def backupusers(ctx):
+async def usersbackup(ctx):
     cursor = await db.execute("SELECT user_id, points FROM users")
     rows = await cursor.fetchall()
 
@@ -300,18 +635,181 @@ async def backupusers(ctx):
 
     os.remove("users_backup.txt")
 
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def clearglobal(ctx):
+
+    bot.tree.clear_commands(guild=None)
+    await bot.tree.sync()
+
+    await ctx.send("Global commands cleared.")
+
 # COMANDOS DE ERROR
 @removeuser.error
 async def removeuser_error(ctx, error):
+    
     if isinstance(error, commands.BadArgument):
         await ctx.send("❌ Invalid user, Make sure to mention a valid member of the server.")
 
 # FUNCIONES
+async def handle_update_points(request):
+    token = request.headers.get('Authorization')
+    if token != os.getenv("WEB_API_TOKEN"):
+        return web.Response(text="No autorizado", status=401)
+    
+    try:
+        data = await request.json()
+        
+        for key, value in data.items():
+            await set_config(key, value)
+            
+        return web.Response(text="Configuración actualizada con éxito", status=200)
+    except Exception as e:
+        print(f"Error procesando JSON: {e}")
+        return web.Response(text="Error en el formato", status=400)
+
+async def start_web_server():
+    app = web.Application()
+    app.router.add_post('/api/guardar-tablas', handle_update_points)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', 8080) # Puerto 8080
+    await site.start()
+    print("Servidor web iniciado en puerto 8080")
+
+def parse_multiplier(value: str) -> float:
+    value = value.strip()
+    value = value.replace(",", ".")
+
+    try:
+        return float(value)
+    except ValueError:
+        raise ValueError("Invalid multiplier format.")
+
+async def calculate_points(allies, enemies, mode, results, battle_type, focus=True):
+    
+    points = 0
+
+    """
+    points += await get_config(f"allies_{allies}") or 0
+    points += await get_config(f"enemies_{enemies}") or 0
+    points += await get_config(f"mode_{mode}") or 0
+    points += await get_config(f"result_{results}") or 0
+    points += await get_config(f"type_{battle_type}") or 0
+    """
+    key = f"base_{mode}_{results}_{'focus' if focus else 'nofocus'}_a{allies}_e{enemies}"
+
+    points = await get_config(key)
+
+    print(f"Allies: {allies}, Enemies: {enemies}, Mode: {mode}, Results: {results}, Battle Type: {battle_type}, Points: {points}")
+
+    return points
+
+def validate_message(message):
+    if not (message.attachments or message.embeds):
+        return False, "❌ Message must contain an image"
+    
+    if len(message.mentions) == 0:
+        return False, "❌ Message must contain at least 1 user"
+    
+    if len(message.mentions) > 5:
+        return False, "❌ Max 5 mentions allowed"
+    
+    return True, None
+
+async def safe_reply(message, content):
+    try:
+        await message.reply(content)
+    except:
+        await message.channel.send(content)
+
+async def send_response(ctx, *, embed=None, view=None, content=None, ephemeral=False):
+    if ctx.interaction:
+
+        if ctx.interaction.response.is_done():
+            return await ctx.interaction.followup.send(content=content, embed=embed, view=view, ephemeral=ephemeral)
+
+        await ctx.interaction.response.send_message(content=content, embed=embed, view=view, ephemeral=ephemeral)
+
+        return await ctx.interaction.original_response()
+
+    return await ctx.send(content=content, embed=embed, view=view)
+
+async def confirm_action(ctx, embed):
+    view = ConfirmView(ctx.author)
+
+    message = await send_response(ctx, embed=embed, view=view)
+    
+    await view.wait()
+
+    return view.value, message
+
+async def save_last_action(action_type, data):
+    await db.execute("""
+        INSERT INTO last_action (id, type, data)
+        VALUES (1, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            type = excluded.type,
+            data = excluded.data
+    """, (action_type, json.dumps(data)))
+
+    await db.commit()
+
+async def get_last_action():
+    cursor = await db.execute("SELECT type, data FROM last_action WHERE id = 1")
+    row = await cursor.fetchone()
+
+    if row is None:
+        return None
+    
+    return {"type": row["type"], "data": json.loads(row["data"]) if row["data"] else {}}
+
+async def clear_last_action():
+    await db.execute("DELETE FROM last_action WHERE id = 1")
+    await db.commit()
+
+async def update_embed(message, embed, title, color, footer=None):
+    embed.title = title
+    embed.color = color
+
+    if footer:
+        embed.set_footer(text=footer)
+
+    await message.edit(embed=embed, view=None)
+
 def get_channel_points(channel_id):
     for data in CHANNELS.values():
         if data['id'] == channel_id:
             return data['points']
     return None
+
+def extract_number(content):
+    match = re.search(r'\d+', content)
+    return int(match.group()) if match else None
+
+async def init_config():
+    for key, value in DEFAULT_CONFIG_POINTS.items():
+        valor_numerico = float(value)
+        await db.execute(
+            "INSERT OR IGNORE INTO points_config (key, value) VALUES (?, ?)", 
+            (key, valor_numerico)
+        )
+    
+    await db.commit()
+    print("Base de datos de configuración inicializada correctamente.")
+
+async def get_config(key):
+    cursor = await db.execute("SELECT value FROM points_config WHERE key = ?", (key,))
+    row = await cursor.fetchone()
+
+    if row:
+        return float(row[0])
+    
+    return 0.0
+
+async def set_config(key, value):
+    await db.execute("INSERT INTO points_config (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value", (key, float(value)))
+    await db.commit()
 
 async def add_approval(message_id: int, user_list: list[str], points: int):
     users_str = ", ".join(user_list)
@@ -504,8 +1002,6 @@ async def restore_backup():
 
     backup_id = row["id"]
 
-    await db.execute("DELETE FROM users")
-
     cursor = await db.execute("""
                               SELECT user_id, points FROM reset_backups_users
                               WHERE backup_id = ?
@@ -513,9 +1009,17 @@ async def restore_backup():
 
     rows = await cursor.fetchall()
 
+    if not rows:
+        return False
+
+    await db.execute("DELETE FROM users")
+
     for row in rows:
         await db.execute("INSERT INTO users (user_id, points) VALUES (?, ?)", (row["user_id"], row["points"]))
     
+    await db.execute("DELETE FROM reset_backups WHERE id = ?", (backup_id,))
+    await db.execute("DELETE FROM reset_backups_users WHERE backup_id = ?", (backup_id,))
+
     await db.commit()
 
     return True
@@ -536,6 +1040,28 @@ async def send_log_approval(guild, message, admin, points):
     embed.add_field(name="👤 Users", value=f"{users}", inline=False)
     embed.add_field(name="📩 Message", value=f"https://discord.com/channels/{guild.id}/{message.channel.id}/{message.id}", inline=False)
 
+    await log_channel.send(embed=embed)
+
+async def send_log_undo(guild, message, admin, undo_type, data):
+    log_channel = guild.get_channel(config['log_channel_id'])
+
+    if log_channel is None:
+        return
+
+    embed = discord.Embed(title="↩️ Undo log", color=discord.Color.blurple(), timestamp=datetime.now(timezone.utc))
+    embed.add_field(name="🔧 Undo type", value=undo_type, inline=False)
+    embed.add_field(name="👤 Admin", value=f"{admin.mention}", inline=False)
+
+    if undo_type == "points_change":
+        users_mentions = ", ".join([f"<@{u}>" for u in data["users"]])
+
+        embed.add_field(name="👥 Users affected", value=users_mentions, inline=False)
+        embed.add_field(name="🎯 Points per user", value=str(data["points"]), inline=False)
+
+    elif undo_type == "last_backup":
+        embed.add_field(name="📦 Action", value="Full leaderboard restore from backup", inline=False)
+
+    embed.add_field(name="📩 Message", value=f"https://discord.com/channels/{guild.id}/{message.channel.id}/{message.id}", inline=False)
     await log_channel.send(embed=embed)
 
 async def send_log_reversal(guild, message, admin, users, points):
@@ -604,15 +1130,15 @@ async def send_log_reset(guild, admin, user_count, total_points, leaderboard_sna
 
         await send_chunks(log_channel, lines, title="📊 **Previous Leaderboard**\n\n")
 
-async def send_log_weekly_reset(guild, admin, amount, user_count, total_points, leaderboard_snapshot):
+async def send_log_modify_all_points(guild, admin, amount, user_count, total_points, leaderboard_snapshot):
     log_channel = guild.get_channel(config['log_channel_id'])
 
     if log_channel is None:
         return
 
-    embed = discord.Embed(title="📜 Weekly reset leaderboard", color=discord.Color.purple(), timestamp=datetime.now(timezone.utc))
+    embed = discord.Embed(title="📜 Modify all leaderboard", color=discord.Color.purple(), timestamp=datetime.now(timezone.utc))
     embed.add_field(name="👤 Admin", value=f"{admin.mention}", inline=False)
-    embed.add_field(name="⚠️ Action", value=f"Weekly reset", inline=False)
+    embed.add_field(name="⚠️ Action", value=f"Modify all points on leaderboard", inline=False)
     embed.add_field(name="🎉 Decay per user", value=str(amount), inline=False)
     embed.add_field(name="👤 Users in leaderboard", value=str(user_count), inline=False)
     embed.add_field(name="💰 Total points before", value=str(total_points), inline=False)
@@ -638,6 +1164,29 @@ async def send_log_remove_user(guild, admin, user, total_points):
 
     await log_channel.send(embed=embed)
 
+async def log_battle_points(guild, message, admin, members, base_points, multiplier, total_points, allies, enemies, mode, result, battle_type):
+    log_channel = guild.get_channel(config['log_channel_id'])
+
+    if log_channel is None:
+        return
+    
+    users_mentions = ", ".join([f"<@{u.id}>" for u in members])
+
+    embed = discord.Embed(title="📜 Battle points log", color=discord.Color.green(), timestamp=datetime.now(timezone.utc))
+    embed.add_field(name="👤 Admin", value=f"{admin.mention}", inline=False)
+    embed.add_field(name="👤 Users", value=f"{users_mentions}", inline=False)
+    embed.add_field(name="🎉 Base points", value=f"{base_points}", inline=False)
+    embed.add_field(name="🎉 Multiplier", value=f"{multiplier}", inline=False)
+    embed.add_field(name="💰 Total points", value=f"{total_points}", inline=False)
+    embed.add_field(name="👤 Allies", value=f"{allies}", inline=False)
+    embed.add_field(name="👤 Enemies", value=f"{enemies}", inline=False)
+    embed.add_field(name="🛡️ Mode", value=f"{mode}", inline=False)
+    embed.add_field(name="⚔️ Result", value=f"{result}", inline=False)
+    embed.add_field(name="🏹 Battle type", value=f"{battle_type}", inline=False)
+    embed.add_field(name="📩 Message", value=f"https://discord.com/channels/{guild.id}/{message.channel.id}/{message.id}", inline=False)
+
+    await log_channel.send(embed=embed)
+
 # EVENTO DE VALIDACION
 @bot.event
 async def on_message(message):
@@ -645,53 +1194,70 @@ async def on_message(message):
     if message.author.bot:
         return
     
-    if message.content.startswith("!"):
-        await bot.process_commands(message)
-        return
-    
-    points = get_channel_points(message.channel.id)
+    if ENABLE_IMAGE_SYSTEM:
 
-    if points is None:
-        return
-    
-    has_image = False
+        if message.author.id == bot.user.id:
+            return
 
-    if message.attachments:
-        has_image = True
-    elif message.embeds:
-        has_image = True
+        if message.content.startswith(tuple(bot.command_prefix)):
+            await bot.process_commands(message)
+            return
+        
+        points = get_channel_points(message.channel.id)
+        nuggets = message.channel.id == config['nuggets_channel_id']
 
-    if not has_image:
-        return
-    
-    if len(message.mentions) == 0:
-        return
-    
-    if len(message.mentions) > 5:
-        await message.reply("Only 5 people mentioned")
-        return
+        if points is None and not nuggets:
+            return
+        
+        valid, error = validate_message(message)
 
-    await message.add_reaction("⌛")
+        if not valid:
+            await safe_reply(message, error)
+            return
+
+        if points is not None:
+            await message.add_reaction("⌛")
+
+        print(nuggets)
+
+        if nuggets:
+            number = extract_number(message.content)
+            print(number)
+
+            if number is None:
+                await safe_reply(message, "❌ You must include a number")
+                return
+
+            print("aprobado para reaccion espera en nuggets")
+
+            await message.add_reaction("⌛")
+    
+    await bot.process_commands(message)
 
 # EVENTO DE APROBACION 
 @bot.event
 async def on_reaction_add(reaction, user):
 
+    if not ENABLE_IMAGE_SYSTEM:
+        return
+
     #COMPROBAR SOLO ADMINS
     if user.bot:
+        return
+    
+    if not user.guild_permissions.administrator:
         return
     
     message = reaction.message
     emoji = reaction.emoji
 
-    if not user.guild_permissions.administrator:
-        return
-
     points = get_channel_points(message.channel.id)
+    nuggets = message.channel.id == config['nuggets_channel_id']
 
-    if points is None:
+    #COMPROBAR CANALES
+    if points is None and not nuggets:
         return
-    
+
     #COMPROBAR MARCADO DEL MENSAJE POR EL BOT
     is_pending = any(str(r.emoji) == "⌛" and r.me for r in message.reactions)
     approval = await get_approval(message.id)
@@ -700,26 +1266,53 @@ async def on_reaction_add(reaction, user):
 
     if not is_pending and not is_approved:
         return
-    
+
     #COMPROBAR DUPLICADOS
     if processed and not is_approved:
         return
-    
+        
     #COMPROBAR REACCION
-    has_image = bool(message.attachments or message.embeds)
+    valid, error = validate_message(message)
 
-    if not has_image:
-        await message.reply("❌ Message must contain an image")
+    if not valid:
+        await message.reply(error)
         return
     
-    if len(message.mentions) == 0:
-        await message.reply("❌ Message must contain at least 1 user")
+    #CANAL DE PEPITAS
+    if nuggets:
+        
+        #APROBAR
+        if str(emoji) == "✅":   
+
+            if is_approved:
+                await message.reply("⚠️ This message is already approved")
+                return
+        
+            await message.remove_reaction("⌛", bot.user)
+
+            await mark_message_processed(message.id)
+        
+        #EXTRAER NUMERO
+        number = extract_number(message.content)
+        discount_multiplier = float(0.2)
+
+        if number is None:
+            await message.reply("❌ You must include a number")
+            return
+        
+        result = int(number * discount_multiplier)
+
+        target_channel = bot.get_channel(config['nuggets_bank_channel_id'])
+
+        if target_channel:
+            await target_channel.send(f"{user.mention} has send {number} nuggets, and {result} nuggets are owed to him")
+
+        await message.reply("Approved successfully!")
+
         return
     
-    if len(message.mentions) > 5:
-        await message.reply("❌ Max 5 mentions allowed")
-        return
-    
+    #CANAL DE PUNTOS
+
     #APROBAR
     if str(emoji) == "✅":   
 
@@ -822,6 +1415,20 @@ async def create_tables():
                         (backup_id INTEGER, 
                         user_id TEXT,
                         points INTEGER)
+                        """)
+
+    await db.execute("""
+                        CREATE TABLE IF NOT EXISTS points_config
+                        (key TEXT PRIMARY KEY, 
+                        value REAL)
+                        """)
+    
+
+    await db.execute("""
+                        CREATE TABLE IF NOT EXISTS last_action
+                        (id INTEGER PRIMARY KEY CHECK (id = 1), 
+                        type TEXT NOT NULL,
+                        data TEXT)
                         """)
 
     await db.commit()
