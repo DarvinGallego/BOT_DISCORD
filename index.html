@@ -119,12 +119,12 @@
             9: "Valores Extra: Prisma, Perco y AvA"
         };
 
-        function cambiarPestaña(numero, elemento) {
+        window.cambiarPestaña = function(numero, elemento) {
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('tab-activa'));
             elemento.classList.add('tab-activa');
             document.getElementById('titulo-tabla').innerText = "Editando: " + nombresPestañas[numero];
             dibujarTabla(numero);
-        }
+        };
 
         window.onload = function() { dibujarTabla(1); };
 
