@@ -476,21 +476,24 @@ async def help(ctx):
 @bot.hybrid_command(name="battlepoints", description="Calculate the points of a battle")
 @app_commands.default_permissions(administrator=True)
 @app_commands.choices(
-    mode=[app_commands.Choice(name="attack", value="attack"), 
-          app_commands.Choice(name="defense", value="defense")], 
-    results=[app_commands.Choice(name="win", value="win"), 
-             app_commands.Choice(name="lose", value="lose")], 
+    mode=[app_commands.Choice(name="Attack", value="attack"), 
+          app_commands.Choice(name="Defense", value="defense")], 
+    results=[app_commands.Choice(name="Win", value="win"), 
+             app_commands.Choice(name="Lose", value="lose")],
+    focus=[app_commands.Choice(name="Focus", value="focus"), 
+           app_commands.Choice(name="No Focus", value="nofocus")],
     battle_type=[app_commands.Choice(name="Prisma", value="Prisma"), 
                  app_commands.Choice(name="AvA", value="AvA"), 
                  app_commands.Choice(name="Perco", value="Perco")])
 @commands.has_permissions(administrator=True)
-async def battlepoints(ctx, allies: int, enemies: int, mode: app_commands.Choice[str], results: app_commands.Choice[str], battle_type: app_commands.Choice[str], multiplier: str,
+async def battlepoints(ctx, allies: int, enemies: int, mode: app_commands.Choice[str], results: app_commands.Choice[str], battle_type: app_commands.Choice[str], focus: app_commands.Choice[str], multiplier: str,
                         member1: discord.Member, member2: Optional[discord.Member] = None, member3: Optional[discord.Member] = None, member4: Optional[discord.Member] = None, member5: Optional[discord.Member] = None):
 
     members = [m for m in [member1, member2, member3, member4, member5] if m]
     mode = mode.value
     results = results.value
     battle_type = battle_type.value
+    is_focus = (focus.value == "focus")
 
     try:
         multiplier = float(multiplier)
@@ -518,12 +521,14 @@ async def battlepoints(ctx, allies: int, enemies: int, mode: app_commands.Choice
     if not members:
         return await ctx.send("❌ You must mention at least one user.")
 
-    base_points = await calculate_points(allies, enemies, mode, results, battle_type)
+    base_points = await calculate_points(allies, enemies, mode, results, battle_type, is_focus)
     base_points = int(base_points) if base_points.is_integer() else base_points
     total_points = float(base_points * multiplier)
     total_points = int(total_points) if total_points.is_integer() else total_points
 
     embed = discord.Embed(title="⚠️ Confirm points", description="Are you sure you want to assign these points?", color=discord.Color.orange())
+
+    embed.add_field(name="🎯 Focus", value=str(is_focus), inline=True)
 
     embed.add_field(name="👤 Allies", value=f"{allies}", inline=True)
     embed.add_field(name="👤 Enemies", value=f"{enemies}", inline=True)
@@ -562,7 +567,7 @@ async def battlepoints(ctx, allies: int, enemies: int, mode: app_commands.Choice
 
     await ctx.reply(f"✅ assigned {total_points} points to {', '.join([member.mention for member in members])}")
 
-    await log_battle_points(ctx.guild, ctx.message, ctx.author, members, base_points, multiplier, total_points, allies, enemies, mode, results, battle_type)
+    await log_battle_points(ctx.guild, ctx.message, ctx.author, members, base_points, multiplier, total_points, allies, enemies, mode, results, battle_type, is_focus)
 
     await update_leaderboard(ctx.guild)
 
@@ -709,24 +714,43 @@ def parse_multiplier(value: str) -> float:
     except ValueError:
         raise ValueError("Invalid multiplier format.")
 
-async def calculate_points(allies, enemies, mode, results, battle_type, focus=True):
+async def calculate_points(allies, enemies, mode, results, battle_type, focus):
     
+    """
     points = 0
 
-    """
     points += await get_config(f"allies_{allies}") or 0
     points += await get_config(f"enemies_{enemies}") or 0
     points += await get_config(f"mode_{mode}") or 0
     points += await get_config(f"result_{results}") or 0
     points += await get_config(f"type_{battle_type}") or 0
     """
-    key = f"base_{mode}_{results}_{'focus' if focus else 'nofocus'}_a{allies}_e{enemies}"
 
-    points = await get_config(key)
-
-    print(f"Allies: {allies}, Enemies: {enemies}, Mode: {mode}, Results: {results}, Battle Type: {battle_type}, Points: {points}")
-
-    return points
+    # 1. Normalización (igual a lo que discutimos)
+    mode_map = {"attack": "ataque", "defense": "defensa"}
+    res_map = {"win": "victoria", "lose": "derrota"}
+    m = mode_map.get(mode, mode)
+    r = res_map.get(results, results)
+    f = "focus" if focus else "nofocus"
+    
+    # El nombre de la condicion completa como lo guardaste en el JSON
+    condicion = f"{m}_{r}_{f}" 
+    
+    # 2. Obtener puntos base (Tabla de aliados/enemigos)
+    # Ajuste: Si en tu index 'e1' es 0 enemigos, entonces el índice es 'enemies + 1'
+    key_base = f"base_{condicion}_a{allies}_e{enemies + 1}"
+    base_pts = float(await get_config(key_base) or 0)
+    
+    # 3. Obtener puntos extra (Prisma, Perco o AvA)
+    # Tu index guarda esto como: extra_prism_ataque_victoria_focus
+    key_extra = f"extra_{battle_type.lower()}_{condicion}"
+    extra_pts = float(await get_config(key_extra) or 0)
+    
+    # 4. Cálculo final
+    total = base_pts + extra_pts
+    
+    print(f"Base: {base_pts}, Extra: {extra_pts}, Total: {total}")
+    return total
 
 def validate_message(message):
     if not (message.attachments or message.embeds):
@@ -1187,7 +1211,7 @@ async def send_log_remove_user(guild, admin, user, total_points):
 
     await log_channel.send(embed=embed)
 
-async def log_battle_points(guild, message, admin, members, base_points, multiplier, total_points, allies, enemies, mode, result, battle_type):
+async def log_battle_points(guild, message, admin, members, base_points, multiplier, total_points, allies, enemies, mode, result, battle_type, focus):
     log_channel = guild.get_channel(config['log_channel_id'])
 
     if log_channel is None:
@@ -1201,6 +1225,7 @@ async def log_battle_points(guild, message, admin, members, base_points, multipl
     embed.add_field(name="🎉 Base points", value=f"{base_points}", inline=False)
     embed.add_field(name="🎉 Multiplier", value=f"{multiplier}", inline=False)
     embed.add_field(name="💰 Total points", value=f"{total_points}", inline=False)
+    embed.add_field(name="🎯 Focus", value=str(focus), inline=False)
     embed.add_field(name="👤 Allies", value=f"{allies}", inline=False)
     embed.add_field(name="👤 Enemies", value=f"{enemies}", inline=False)
     embed.add_field(name="🛡️ Mode", value=f"{mode}", inline=False)
