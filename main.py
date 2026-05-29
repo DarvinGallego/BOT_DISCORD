@@ -676,7 +676,7 @@ async def handle_update_points(request):
     try:
         data = await request.json()
         for key, value in data.items():
-            await set_config(key, value)
+            await set_config(key, float(value))
             
         # IMPORTANTE: Incluir Access-Control-Allow-Origin en la respuesta de éxito
         return web.Response(
