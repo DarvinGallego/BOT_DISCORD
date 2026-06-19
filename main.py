@@ -693,25 +693,35 @@ async def handle_update_points(request):
         )
 
 async def handle_get_config(request):
-    # Validar el token igual que en handle_update_points
+    # 1. Manejo del preflight (OPTIONS)
+    if request.method == 'OPTIONS':
+        headers = {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        }
+        return web.Response(headers=headers, status=200)
+
+    # 2. Validación de Token
     token = request.headers.get('Authorization')
     if token != os.getenv("WEB_API_TOKEN"):
         return web.Response(text="No autorizado", status=401, headers={'Access-Control-Allow-Origin': '*'})
     
-    # Obtener todo de la base de datos
+    # 3. Lógica original de obtener datos
     cursor = await db.execute("SELECT key, value FROM points_config")
     rows = await cursor.fetchall()
-    
-    # Convertir a un diccionario simple {key: value}
     config_dict = {row["key"]: row["value"] for row in rows}
     
     return web.json_response(config_dict, headers={'Access-Control-Allow-Origin': '*'})
 
 async def start_web_server():
     app = web.Application()
+
     app.router.add_post('/api/guardar-tablas', handle_update_points)
     app.router.add_options('/api/guardar-tablas', handle_update_points)
+
     app.router.add_get('/api/obtener-tablas', handle_get_config)
+    app.router.add_options('/api/obtener-tablas', handle_get_config)
 
     runner = web.AppRunner(app)
     await runner.setup()
