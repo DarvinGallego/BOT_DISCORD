@@ -146,9 +146,12 @@
                         if (datos[`extra_ava_${c}`] !== undefined) fila.ava = datos[`extra_ava_${c}`];
                     });
 
-                    dibujarTabla(1); // Dibujar la primera tabla al terminar
+                    dibujarTabla(1);
                 }
-            } catch (e) { console.error("No se pudieron cargar los datos:", e); }
+            } catch (e) { 
+                console.error("No se pudieron cargar los datos, cargando valores por defecto:", e);
+                dibujarTabla(1);            
+            }
         }
 
         // --- 4. CAMBIAR PESTAÑA ---
@@ -168,7 +171,7 @@
         };
 
         window.onload = function() { cargarDatosDesdeBot(); };
-        
+
         // --- 5. ENVIAR AL BOT (BACKEND) ---
         document.getElementById('btn-guardar').addEventListener('click', async function() {
             if (tablaActiva) { datosTablas[pestañaActual] = tablaActiva.getData(); }
