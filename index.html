@@ -110,6 +110,47 @@
             pestañaActual = numeroPestaña;
         }
 
+        async function cargarDatosDesdeBot() {
+            try {
+                const respuesta = await fetch('https://botdiscord-production-e701.up.railway.app/api/obtener-tablas', {
+                    method: 'GET',
+                    headers: { 'Authorization': 'UnTokenSecreto123' }
+                });
+
+                if (respuesta.ok) {
+                    const datos = await respuesta.json();
+                    
+                    // 1. Rellenar tablas base (1-8)
+                    const sufijos = {
+                        1: "ataque_victoria_focus", 2: "ataque_victoria_nofocus",
+                        3: "ataque_derrota_focus", 4: "ataque_derrota_nofocus",
+                        5: "defensa_victoria_focus", 6: "defensa_victoria_nofocus",
+                        7: "defensa_derrota_focus", 8: "defensa_derrota_nofocus"
+                    };
+
+                    for (let i = 1; i <= 8; i++) {
+                        datosTablas[i].forEach(fila => {
+                            for (let e = 1; e <= 6; e++) {
+                                let llave = `base_${sufijos[i]}_${fila.id}_e${e}`;
+                                if (datos[llave] !== undefined) fila[`e${e}`] = datos[llave];
+                            }
+                        });
+                    }
+
+                    // 2. Rellenar tabla especial (9)
+                    const conds = Object.values(sufijos);
+                    datosTablas[9].forEach((fila, index) => {
+                        let c = conds[index];
+                        if (datos[`extra_prism_${c}`] !== undefined) fila.prism = datos[`extra_prism_${c}`];
+                        if (datos[`extra_perco_${c}`] !== undefined) fila.perco = datos[`extra_perco_${c}`];
+                        if (datos[`extra_ava_${c}`] !== undefined) fila.ava = datos[`extra_ava_${c}`];
+                    });
+
+                    dibujarTabla(1); // Dibujar la primera tabla al terminar
+                }
+            } catch (e) { console.error("No se pudieron cargar los datos:", e); }
+        }
+
         // --- 4. CAMBIAR PESTAÑA ---
         const nombresPestañas = {
             1: "Ataque + Victoria + Focus", 2: "Ataque + Victoria + No Focus",
@@ -126,8 +167,8 @@
             dibujarTabla(numero);
         };
 
-        window.onload = function() { dibujarTabla(1); };
-
+        window.onload = function() { cargarDatosDesdeBot(); };
+        
         // --- 5. ENVIAR AL BOT (BACKEND) ---
         document.getElementById('btn-guardar').addEventListener('click', async function() {
             if (tablaActiva) { datosTablas[pestañaActual] = tablaActiva.getData(); }
