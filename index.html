@@ -80,19 +80,19 @@
         // --- 2. COLUMNAS VISUALES ---
         const columnasBase = [
             { title: "Aliados ↓ / Enemigos →", field: "aliados", width: 180, cssClass: "bg-gray-200 font-bold", headerSort: false },
-            { title: "0 Enemigo", field: "e1", editor: "number", headerSort: false, hozAlign: "center" },
-            { title: "1 Enemigos", field: "e2", editor: "number", headerSort: false, hozAlign: "center" },
-            { title: "2 Enemigos", field: "e3", editor: "number", headerSort: false, hozAlign: "center" },
-            { title: "3 Enemigos", field: "e4", editor: "number", headerSort: false, hozAlign: "center" },
-            { title: "4 Enemigos", field: "e5", editor: "number", headerSort: false, hozAlign: "center" },
-            { title: "5 Enemigos", field: "e6", editor: "number", headerSort: false, hozAlign: "center" }
+            { title: "0 Enemigo", field: "e1", editor: "number", formatter: formatoEntero, headerSort: false, hozAlign: "center" },
+            { title: "1 Enemigos", field: "e2", editor: "number", formatter: formatoEntero, headerSort: false, hozAlign: "center" },
+            { title: "2 Enemigos", field: "e3", editor: "number", formatter: formatoEntero, headerSort: false, hozAlign: "center" },
+            { title: "3 Enemigos", field: "e4", editor: "number", formatter: formatoEntero, headerSort: false, hozAlign: "center" },
+            { title: "4 Enemigos", field: "e5", editor: "number", formatter: formatoEntero, headerSort: false, hozAlign: "center" },
+            { title: "5 Enemigos", field: "e6", editor: "number", formatter: formatoEntero, headerSort: false, hozAlign: "center" }
         ];
 
         const columnasEspeciales = [
             { title: "Condición", field: "condicion", width: 200, cssClass: "bg-gray-200 font-bold", headerSort: false },
-            { title: "Prisma", field: "prism", editor: "number", headerSort: false, hozAlign: "center" },
-            { title: "Perco", field: "perco", editor: "number", headerSort: false, hozAlign: "center" },
-            { title: "AvA", field: "ava", editor: "number", headerSort: false, hozAlign: "center" }
+            { title: "Prisma", field: "prism", editor: "number", formatter: formatoEntero, headerSort: false, hozAlign: "center" },
+            { title: "Perco", field: "perco", editor: "number", formatter: formatoEntero, headerSort: false, hozAlign: "center" },
+            { title: "AvA", field: "ava", editor: "number", formatter: formatoEntero, headerSort: false, hozAlign: "center" }
         ];
 
         // --- 3. DIBUJAR TABLA ---
@@ -108,6 +108,11 @@
                 columns: columnasUsar,
             });
             pestañaActual = numeroPestaña;
+        }
+
+        // Define esta función al principio de tu script
+        function formatoEntero(cell, formatterParams, onRendered) {
+            return Math.round(cell.getValue());
         }
 
         async function cargarDatosDesdeBot() {
