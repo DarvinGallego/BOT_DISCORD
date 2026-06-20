@@ -110,42 +110,21 @@
             pestañaActual = numeroPestaña;
         }
 
-        function formatoEntero(cell, formatterParams, onRendered) {
-            let value = cell.getValue();
-            if (value === undefined || value === null) return "0";
-            return (value % 1 === 0) ? Math.floor(value) : value;
-        }
-
         function crearColumnaNumero(titulo, campo) {
             return {
                 title: titulo,
                 field: campo,
                 editor: "number",
-                editorParams: { step: "any", min: 0 },
+                editorParams: {
+                    step: "any",
+                    elementAttributes: {
+                        name: "cell-editor"
+                    }
+                },
                 formatter: (cell) => {
                     let value = cell.getValue();
                     if (value === undefined || value === null) return "0";
                     return (value % 1 === 0) ? Math.floor(value) : value;
-                },
-                editorHTML: function(cell, onRendered, success, cancel, editorParams) {
-                    let editor = document.createElement("input");
-                    editor.setAttribute("type", "number");
-                    editor.setAttribute("step", "any");
-                    editor.setAttribute("name", "cell-editor");
-                    editor.style.width = "100%";
-                    // Asignamos el valor crudo
-                    editor.value = cell.getValue();
-                    
-                    onRendered(() => {
-                        editor.focus();
-                        editor.select();
-                    });
-
-                    // Al salir o dar Enter, guardamos
-                    editor.onblur = () => success(parseFloat(editor.value) || 0);
-                    editor.onkeydown = (e) => { if(e.keyCode == 13) success(parseFloat(editor.value) || 0); };
-                    
-                    return editor;
                 },
                 hozAlign: "center"
             };
