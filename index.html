@@ -80,19 +80,19 @@
         // --- 2. COLUMNAS VISUALES ---
         const columnasBase = [
             { title: "Aliados ↓ / Enemigos →", field: "aliados", width: 180, cssClass: "bg-gray-200 font-bold", headerSort: false },
-            { title: "0 Enemigo", field: "e1", editor: "number", editorParams: {step: "0.1", }, formatter: formatoEntero, headerSort: false, hozAlign: "center" },
-            { title: "1 Enemigos", field: "e2", editor: "number", editorParams: {step: "0.1", }, formatter: formatoEntero, headerSort: false, hozAlign: "center" },
-            { title: "2 Enemigos", field: "e3", editor: "number", editorParams: {step: "0.1", }, formatter: formatoEntero, headerSort: false, hozAlign: "center" },
-            { title: "3 Enemigos", field: "e4", editor: "number", editorParams: {step: "0.1", }, formatter: formatoEntero, headerSort: false, hozAlign: "center" },
-            { title: "4 Enemigos", field: "e5", editor: "number", editorParams: {step: "0.1", }, formatter: formatoEntero, headerSort: false, hozAlign: "center" },
-            { title: "5 Enemigos", field: "e6", editor: "number", editorParams: {step: "0.1", }, formatter: formatoEntero, headerSort: false, hozAlign: "center" }
+            crearColumnaNumero("0 Enemigos", "e1"),
+            crearColumnaNumero("1 Enemigos", "e2"),
+            crearColumnaNumero("2 Enemigos", "e3"),
+            crearColumnaNumero("3 Enemigos", "e4"),
+            crearColumnaNumero("4 Enemigos", "e5"),
+            crearColumnaNumero("5 Enemigos", "e6"),
         ];
 
         const columnasEspeciales = [
             { title: "Condición", field: "condicion", width: 200, cssClass: "bg-gray-200 font-bold", headerSort: false },
-            { title: "Prisma", field: "prism", editor: "number", editorParams: {step: "0.1", }, formatter: formatoEntero, headerSort: false, hozAlign: "center" },
-            { title: "Perco", field: "perco", editor: "number", editorParams: {step: "0.1", }, formatter: formatoEntero, headerSort: false, hozAlign: "center" },
-            { title: "AvA", field: "ava", editor: "number", editorParams: {step: "0.1", }, formatter: formatoEntero, headerSort: false, hozAlign: "center" }
+            crearColumnaNumero("Prisma", "prism"),
+            crearColumnaNumero("Perco", "perco"),
+            crearColumnaNumero("AvA", "ava")
         ];
 
         // --- 3. DIBUJAR TABLA ---
@@ -110,10 +110,45 @@
             pestañaActual = numeroPestaña;
         }
 
-        // Define esta función al principio de tu script
         function formatoEntero(cell, formatterParams, onRendered) {
             let value = cell.getValue();
+            if (value === undefined || value === null) return "0";
             return (value % 1 === 0) ? Math.floor(value) : value;
+        }
+
+        function crearColumnaNumero(titulo, campo) {
+            return {
+                title: titulo,
+                field: campo,
+                editor: "number",
+                editorParams: { step: "any", min: 0 },
+                formatter: (cell) => {
+                    let value = cell.getValue();
+                    if (value === undefined || value === null) return "0";
+                    return (value % 1 === 0) ? Math.floor(value) : value;
+                },
+                editorHTML: function(cell, onRendered, success, cancel, editorParams) {
+                    let editor = document.createElement("input");
+                    editor.setAttribute("type", "number");
+                    editor.setAttribute("step", "any");
+                    editor.setAttribute("name", "cell-editor");
+                    editor.style.width = "100%";
+                    // Asignamos el valor crudo
+                    editor.value = cell.getValue();
+                    
+                    onRendered(() => {
+                        editor.focus();
+                        editor.select();
+                    });
+
+                    // Al salir o dar Enter, guardamos
+                    editor.onblur = () => success(parseFloat(editor.value) || 0);
+                    editor.onkeydown = (e) => { if(e.keyCode == 13) success(parseFloat(editor.value) || 0); };
+                    
+                    return editor;
+                },
+                hozAlign: "center"
+            };
         }
 
         async function cargarDatosDesdeBot() {
@@ -138,7 +173,7 @@
                         datosTablas[i].forEach(fila => {
                             for (let e = 1; e <= 6; e++) {
                                 let llave = `base_${sufijos[i]}_${fila.id}_e${e}`;
-                                if (datos[llave] !== undefined) fila[`e${e}`] = datos[llave];
+                                if (datos[llave] !== undefined) fila[`e${e}`] = Number(datos[llave]);
                             }
                         });
                     }
