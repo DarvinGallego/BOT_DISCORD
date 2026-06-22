@@ -571,6 +571,51 @@ async def battlepoints(ctx, allies: int, enemies: int, mode: app_commands.Choice
 
     await update_leaderboard(ctx.guild)
 
+@bot.hybrid_command(name="configreward", description="Configure a reward up to a certain position")
+@commands.has_permissions(administrator=True)
+async def config_reward(ctx, rank: int, *, reward: str):
+
+    await db.execute(
+        "INSERT OR REPLACE INTO reward_config (rank, reward_text) VALUES (?, ?)",
+        (rank, reward)
+    )
+
+    await db.commit()
+
+    await send_log_reward_config(ctx.guild, ctx.author, "Created/Updated", rank, reward)
+
+    await ctx.send(f"✅ reward up to the position {rank} established as **{reward}**")
+
+@bot.hybrid_command(name="listrewards", description="List all current rewards")
+async def list_rewards(ctx):
+    cursor = await db.execute("SELECT rank, reward_text FROM reward_config ORDER BY rank ASC")
+    rules = await cursor.fetchall()
+    
+    if not rules:
+        return await ctx.send("No rewards are configured.")
+        
+    msg = "**Leaderboard Goals:**\n"
+    for rule in rules:
+        msg += f"• Up to rank {rule['rank']}: {rule['reward_text']}\n"
+    await ctx.send(msg)
+
+@bot.hybrid_command(name="deletereward", description="Remove a reward rule per rank")
+@commands.has_permissions(administrator=True)
+async def delete_reward(ctx, rank: int):
+
+    cursor = await db.execute("SELECT reward_text FROM reward_config WHERE rank = ?", (rank,))
+    row = await cursor.fetchone()
+    
+    if row:
+        await db.execute("DELETE FROM reward_config WHERE rank = ?", (rank,))
+        await db.commit()
+        
+        await send_log_reward_config(ctx.guild, ctx.author, "Deleted", rank)
+        await ctx.send(f"🗑️ Rank reward {rank} deleted.")
+    else:
+        await ctx.send(f"❌ Does not exist a reward up to the rank {rank}.")
+
+"""
 @bot.hybrid_command(name="configpoints", description="Modifies the values of /manualpoints command")
 @app_commands.default_permissions(administrator=True)
 @app_commands.choices(
@@ -599,6 +644,7 @@ async def configpoints(ctx, key: app_commands.Choice[str], value: str):
 
     await set_config(key, value)
     await ctx.reply(f"✅ {key} updated to {value}")
+"""
 
 #COMANDOS DE DESARROLLADOR  
 @bot.command(name="setup", description="Developer command: Setup the bot")
@@ -972,10 +1018,23 @@ async def generate_leaderboard():
     cursor = await db.execute("SELECT user_id, points FROM users ORDER BY points DESC")
     rows = await cursor.fetchall()
 
+    cursor_rewards = await db.execute("SELECT rank, reward_text FROM reward_config ORDER BY rank ASC")
+    reward_rules = await cursor_rewards.fetchall()
+
     lines = []
 
     for i, row in enumerate(rows, start=1):
-        lines.append(f"{i}. <@{row['user_id']}> - {row['points']} points\n")
+        reward_final = None
+        
+        for rule in reward_rules:
+            if i <= rule["rank"]:
+                reward_final = rule["reward_text"]
+                break
+        
+        linea = f"{i}. <@{row['user_id']}> - {row['points']} points"
+        if reward_final:
+            linea += f" - {reward_final}"
+        lines.append(f"{linea}\n")
 
     return lines
 
@@ -1261,6 +1320,23 @@ async def log_battle_points(guild, message, admin, members, base_points, multipl
 
     await log_channel.send(embed=embed)
 
+async def send_log_reward_config(guild, admin, action, rank, reward=None):
+    log_channel = guild.get_channel(config['log_channel_id'])
+    if log_channel is None:
+        return
+
+    color = discord.Color.green() if action != "Deleted" else discord.Color.red()
+    title = f"📜 Reward {action} log"
+    
+    embed = discord.Embed(title=title, color=color, timestamp=datetime.now(timezone.utc))
+    embed.add_field(name="👤 Admin", value=f"{admin.mention}", inline=False)
+    embed.add_field(name="🎯 Rank", value=f"Top {rank}", inline=True)
+    
+    if reward:
+        embed.add_field(name="🎁 Reward", value=f"{reward}", inline=True)
+
+    await log_channel.send(embed=embed)
+
 # EVENTO DE VALIDACION
 @bot.event
 async def on_message(message):
@@ -1503,6 +1579,12 @@ async def create_tables():
                         (id INTEGER PRIMARY KEY CHECK (id = 1), 
                         type TEXT NOT NULL,
                         data TEXT)
+                        """)
+    
+    await db.execute("""
+                        CREATE TABLE IF NOT EXISTS reward_config 
+                        (rank INTEGER PRIMARY KEY, 
+                        reward_text TEXT)
                         """)
 
     await db.commit()
