@@ -586,7 +586,7 @@ async def config_reward(ctx, rank: int, *, reward: str):
 
     await send_log_reward_config(ctx.guild, ctx.author, "Created/Updated", rank, reward)
 
-    await ctx.send(f"✅ reward up to the position {rank} established as **{reward}**")
+    await ctx.reply(f"✅ reward up to the position {rank} established as **{reward}**")
 
 @bot.hybrid_command(name="listrewards", description="List all current rewards")
 async def list_rewards(ctx):
@@ -594,12 +594,12 @@ async def list_rewards(ctx):
     rules = await cursor.fetchall()
     
     if not rules:
-        return await ctx.send("No rewards are configured.")
+        return await ctx.reply("No rewards are configured.")
         
     msg = "**Leaderboard Goals:**\n"
     for rule in rules:
         msg += f"• Up to rank {rule['rank']}: {rule['reward_text']}\n"
-    await ctx.send(msg)
+    await ctx.reply(msg)
 
 @bot.hybrid_command(name="deletereward", description="Remove a reward rule per rank")
 @commands.has_permissions(administrator=True)
@@ -617,10 +617,10 @@ async def delete_reward(ctx, rank: int):
         
         await send_log_reward_config(ctx.guild, ctx.author, "Deleted", rank)
 
-        await ctx.send(f"🗑️ Rank reward {rank} deleted.")
+        await ctx.reply(f"🗑️ Rank reward {rank} deleted.")
 
     else:
-        await ctx.send(f"❌ Does not exist a reward up to the rank {rank}.")
+        await ctx.reply(f"❌ Does not exist a reward up to the rank {rank}.")
 
 """
 @bot.hybrid_command(name="configpoints", description="Modifies the values of /manualpoints command")
