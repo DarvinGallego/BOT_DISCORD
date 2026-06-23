@@ -590,20 +590,19 @@ async def config_reward(ctx, rank: int, *, reward: str):
 
 @bot.hybrid_command(name="listrewards", description="List all current rewards")
 async def list_rewards(ctx):
-    await ctx.defer()
 
     cursor = await db.execute("SELECT rank, reward_text FROM reward_config ORDER BY rank ASC")
     rules = await cursor.fetchall()
     
     if not rules:
-        return await ctx.followup.send("No rewards are configured.")
+        return await safe_reply(ctx, "No rewards are configured.")
         
     msg = "**Leaderboard Goals:**\n"
 
     for rule in rules:
         msg += f"• Up to rank {rule['rank']}: {rule['reward_text']}\n"
 
-    await ctx.followup.send(msg)
+    await safe_reply(ctx, msg)
 
 @bot.hybrid_command(name="deletereward", description="Remove a reward rule per rank")
 @commands.has_permissions(administrator=True)
