@@ -582,6 +582,8 @@ async def config_reward(ctx, rank: int, *, reward: str):
 
     await db.commit()
 
+    await update_leaderboard(ctx.guild)
+
     await send_log_reward_config(ctx.guild, ctx.author, "Created/Updated", rank, reward)
 
     await ctx.send(f"✅ reward up to the position {rank} established as **{reward}**")
@@ -608,10 +610,15 @@ async def delete_reward(ctx, rank: int):
     
     if row:
         await db.execute("DELETE FROM reward_config WHERE rank = ?", (rank,))
+
         await db.commit()
+
+        await update_leaderboard(ctx.guild)
         
         await send_log_reward_config(ctx.guild, ctx.author, "Deleted", rank)
+
         await ctx.send(f"🗑️ Rank reward {rank} deleted.")
+
     else:
         await ctx.send(f"❌ Does not exist a reward up to the rank {rank}.")
 
