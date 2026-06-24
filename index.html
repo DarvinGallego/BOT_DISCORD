@@ -23,26 +23,26 @@
     <div class="max-w-6xl mx-auto bg-white rounded-lg shadow-lg overflow-hidden">
         
         <div class="flex justify-between items-center bg-gray-800 text-white p-6">
-            <h1 class="text-2xl font-bold">Gestor de Variables de Combate</h1>
+            <h1 class="text-2xl font-bold">Combat Variable Manager</h1>
             <button id="btn-guardar" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-6 rounded transition-colors shadow-md">
-                💾 Guardar Configuración en el Bot
+                💾 Save Settings in Bot
             </button>
         </div>
 
         <div class="border-b border-gray-200 bg-gray-50 flex overflow-x-auto whitespace-nowrap">
-            <button class="tab-btn tab-activa px-4 py-4 hover:bg-gray-200 transition" onclick="cambiarPestaña(1, this)">Ataque/Vic/Focus</button>
-            <button class="tab-btn px-4 py-4 hover:bg-gray-200 transition" onclick="cambiarPestaña(2, this)">Ataque/Vic/NoFocus</button>
-            <button class="tab-btn px-4 py-4 hover:bg-gray-200 transition" onclick="cambiarPestaña(3, this)">Ataque/Der/Focus</button>
-            <button class="tab-btn px-4 py-4 hover:bg-gray-200 transition" onclick="cambiarPestaña(4, this)">Ataque/Der/NoFocus</button>
-            <button class="tab-btn px-4 py-4 hover:bg-gray-200 transition" onclick="cambiarPestaña(5, this)">Defensa/Vic/Focus</button>
-            <button class="tab-btn px-4 py-4 hover:bg-gray-200 transition" onclick="cambiarPestaña(6, this)">Defensa/Vic/NoFocus</button>
-            <button class="tab-btn px-4 py-4 hover:bg-gray-200 transition" onclick="cambiarPestaña(7, this)">Defensa/Der/Focus</button>
-            <button class="tab-btn px-4 py-4 hover:bg-gray-200 transition" onclick="cambiarPestaña(8, this)">Defensa/Der/NoFocus</button>
-            <button class="tab-btn px-6 py-4 hover:bg-gray-200 transition text-purple-700 font-bold" onclick="cambiarPestaña(9, this)">⭐ Tipos de Combate</button>
+            <button class="tab-btn tab-activa px-4 py-4 hover:bg-gray-200 transition" onclick="cambiarPestaña(1, this)">Attack/Win/Focus</button>
+            <button class="tab-btn px-4 py-4 hover:bg-gray-200 transition" onclick="cambiarPestaña(2, this)">Attack/Win/NoFocus</button>
+            <button class="tab-btn px-4 py-4 hover:bg-gray-200 transition" onclick="cambiarPestaña(3, this)">Attack/Lose/Focus</button>
+            <button class="tab-btn px-4 py-4 hover:bg-gray-200 transition" onclick="cambiarPestaña(4, this)">Attack/Lose/NoFocus</button>
+            <button class="tab-btn px-4 py-4 hover:bg-gray-200 transition" onclick="cambiarPestaña(5, this)">Defense/Win/Focus</button>
+            <button class="tab-btn px-4 py-4 hover:bg-gray-200 transition" onclick="cambiarPestaña(6, this)">Defense/Win/NoFocus</button>
+            <button class="tab-btn px-4 py-4 hover:bg-gray-200 transition" onclick="cambiarPestaña(7, this)">Defense/Lose/Focus</button>
+            <button class="tab-btn px-4 py-4 hover:bg-gray-200 transition" onclick="cambiarPestaña(8, this)">Defense/Lose/NoFocus</button>
+            <button class="tab-btn px-6 py-4 hover:bg-gray-200 transition text-purple-700 font-bold" onclick="cambiarPestaña(9, this)">⭐ Combat types</button>
         </div>
 
         <div class="p-6">
-            <h2 id="titulo-tabla" class="text-xl font-semibold mb-4 text-gray-700">Editando: Ataque + Victoria + Focus</h2>
+            <h2 id="titulo-tabla" class="text-xl font-semibold mb-4 text-gray-700">Editing: Attack + Win + Focus</h2>
             <div id="mi-tabla-excel" class="w-full"></div>
         </div>
     </div>
@@ -53,25 +53,25 @@
 
         function generarMatrizBase() {
             return [
-                { id: "a1", aliados: "1 Aliado", e1: 0, e2: 0, e3: 0, e4: 0, e5: 0, e6: 0 },
-                { id: "a2", aliados: "2 Aliados", e1: 0, e2: 0, e3: 0, e4: 0, e5: 0, e6: 0 },
-                { id: "a3", aliados: "3 Aliados", e1: 0, e2: 0, e3: 0, e4: 0, e5: 0, e6: 0 },
-                { id: "a4", aliados: "4 Aliados", e1: 0, e2: 0, e3: 0, e4: 0, e5: 0, e6: 0 },
-                { id: "a5", aliados: "5 Aliados", e1: 0, e2: 0, e3: 0, e4: 0, e5: 0, e6: 0 }
+                { id: "a1", aliados: "1 Allies", e1: 0, e2: 0, e3: 0, e4: 0, e5: 0, e6: 0 },
+                { id: "a2", aliados: "2 Allies", e1: 0, e2: 0, e3: 0, e4: 0, e5: 0, e6: 0 },
+                { id: "a3", aliados: "3 Allies", e1: 0, e2: 0, e3: 0, e4: 0, e5: 0, e6: 0 },
+                { id: "a4", aliados: "4 Allies", e1: 0, e2: 0, e3: 0, e4: 0, e5: 0, e6: 0 },
+                { id: "a5", aliados: "5 Allies", e1: 0, e2: 0, e3: 0, e4: 0, e5: 0, e6: 0 }
             ];
         }
 
         for (let i = 1; i <= 8; i++) { datosTablas[i] = generarMatrizBase(); }
 
         datosTablas[9] = [
-            { id: "c1", condicion: "Ataque/Vic/Focus", prism: 0, perco: 0, ava: 0 },
-            { id: "c2", condicion: "Ataque/Vic/NoFocus", prism: 0, perco: 0, ava: 0 },
-            { id: "c3", condicion: "Ataque/Der/Focus", prism: 0, perco: 0, ava: 0 },
-            { id: "c4", condicion: "Ataque/Der/NoFocus", prism: 0, perco: 0, ava: 0 },
-            { id: "c5", condicion: "Defensa/Vic/Focus", prism: 0, perco: 0, ava: 0 },
-            { id: "c6", condicion: "Defensa/Vic/NoFocus", prism: 0, perco: 0, ava: 0 },
-            { id: "c7", condicion: "Defensa/Der/Focus", prism: 0, perco: 0, ava: 0 },
-            { id: "c8", condicion: "Defensa/Der/NoFocus", prism: 0, perco: 0, ava: 0 }
+            { id: "c1", condicion: "Attack/Win/Focus", prism: 0, perco: 0, ava: 0 },
+            { id: "c2", condicion: "Attack/Win/NoFocus", prism: 0, perco: 0, ava: 0 },
+            { id: "c3", condicion: "Attack/Lose/Focus", prism: 0, perco: 0, ava: 0 },
+            { id: "c4", condicion: "Attack/Lose/NoFocus", prism: 0, perco: 0, ava: 0 },
+            { id: "c5", condicion: "Defense/Win/Focus", prism: 0, perco: 0, ava: 0 },
+            { id: "c6", condicion: "Defense/Win/NoFocus", prism: 0, perco: 0, ava: 0 },
+            { id: "c7", condicion: "Defense/Lose/Focus", prism: 0, perco: 0, ava: 0 },
+            { id: "c8", condicion: "Defense/Lose/NoFocus", prism: 0, perco: 0, ava: 0 }
         ];
 
         let tablaActiva = null;
@@ -79,18 +79,18 @@
 
         // --- 2. COLUMNAS VISUALES ---
         const columnasBase = [
-            { title: "Aliados ↓ / Enemigos →", field: "aliados", width: 180, cssClass: "bg-gray-200 font-bold", headerSort: false },
-            crearColumnaNumero("0 Enemigos", "e1"),
-            crearColumnaNumero("1 Enemigos", "e2"),
-            crearColumnaNumero("2 Enemigos", "e3"),
-            crearColumnaNumero("3 Enemigos", "e4"),
-            crearColumnaNumero("4 Enemigos", "e5"),
-            crearColumnaNumero("5 Enemigos", "e6"),
+            { title: "Allies ↓ / Enemies →", field: "allies", width: 180, cssClass: "bg-gray-200 font-bold", headerSort: false },
+            crearColumnaNumero("0 Enemies", "e1"),
+            crearColumnaNumero("1 Enemies", "e2"),
+            crearColumnaNumero("2 Enemies", "e3"),
+            crearColumnaNumero("3 Enemies", "e4"),
+            crearColumnaNumero("4 Enemies", "e5"),
+            crearColumnaNumero("5 Enemies", "e6"),
         ];
 
         const columnasEspeciales = [
-            { title: "Condición", field: "condicion", width: 200, cssClass: "bg-gray-200 font-bold", headerSort: false },
-            crearColumnaNumero("Prisma", "prism"),
+            { title: "Battle Condition", field: "condicion", width: 200, cssClass: "bg-gray-200 font-bold", headerSort: false },
+            crearColumnaNumero("Prism", "prism"),
             crearColumnaNumero("Perco", "perco"),
             crearColumnaNumero("AvA", "ava")
         ];
@@ -176,17 +176,17 @@
 
         // --- 4. CAMBIAR PESTAÑA ---
         const nombresPestañas = {
-            1: "Ataque + Victoria + Focus", 2: "Ataque + Victoria + No Focus",
-            3: "Ataque + Derrota + Focus", 4: "Ataque + Derrota + No Focus",
-            5: "Defensa + Victoria + Focus", 6: "Defensa + Victoria + No Focus",
-            7: "Defensa + Derrota + Focus", 8: "Defensa + Derrota + No Focus",
-            9: "Valores Extra: Prisma, Perco y AvA"
+            1: "Attack + Win + Focus", 2: "Attack + Win + No Focus",
+            3: "Attack+ Defeat + Focus", 4: "Attack + Defeat + No Focus",
+            5: "Defense + Win + Focus", 6: "Defense + Win + No Focus",
+            7: "Defense + Defeat + Focus", 8: "Defense + Defeat + No Focus",
+            9: "Extra Values: Prism, Perco & AvA"
         };
 
         window.cambiarPestaña = function(numero, elemento) {
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('tab-activa'));
             elemento.classList.add('tab-activa');
-            document.getElementById('titulo-tabla').innerText = "Editando: " + nombresPestañas[numero];
+            document.getElementById('titulo-tabla').innerText = "Editing: " + nombresPestañas[numero];
             dibujarTabla(numero);
         };
 
@@ -223,7 +223,7 @@
 
             console.log("Datos listos para enviar:", JSON_ParaElBot); // Para que lo veas en consola (F12)
             const btn = document.getElementById('btn-guardar');
-            btn.innerText = "⏳ Guardando...";
+            btn.innerText = "⏳ Saving...";
 
             try {
                 // AQUÍ: Reemplaza con la IP real cuando el backend esté listo
@@ -236,13 +236,13 @@
                     body: JSON.stringify(JSON_ParaElBot)
                 });
 
-                if (respuesta.ok) { alert("✅ ¡Las 264 variables se actualizaron en el bot!"); } 
-                else { alert("❌ Error al comunicar con el bot."); }
+                if (respuesta.ok) { alert("✅ ¡The 264 variables were updated in the bot!"); } 
+                else { alert("❌ Error communicating with the bot."); }
             } catch (error) {
                 console.error(error);
                 alert("❌ No se pudo conectar con el servidor (Asegúrate de cambiar IP_DE_TU_BOT en el código).");
             } finally {
-                btn.innerText = "💾 Guardar Configuración en el Bot";
+                btn.innerText = "💾 Save Settings in Bot";
             }
         });
     </script>
