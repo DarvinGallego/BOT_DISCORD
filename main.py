@@ -447,7 +447,11 @@ async def help(ctx):
             "/battlepoints → Calculate the points of a battle",
             "/resetpoints → Reset leaderboard",
             "/modifyallpoints amount → Substract points from all users",
-            "/undo → Undo last action"
+            "/undo → Undo last action",
+            "/configreward → Configure a reward up to a certain position",
+            "/listrewards → List all current rewards",
+            "/deletereward → Remove a reward rule per rank",
+            "/resetrewards → Reset all rewards"
         ]
 
         safety_notes =  [
@@ -624,6 +628,20 @@ async def delete_reward(ctx, rank: int):
 
     else:
         await ctx.reply(f"❌ Does not exist a reward up to the rank {rank}.")
+
+@bot.hybrid_command(name="resetrewards", description="Delete all rewards")
+@commands.has_permissions(administrator=True)
+async def reset_rewards(ctx):
+ 
+    await db.execute("DELETE FROM reward_config")
+
+    await db.commit()
+
+    await update_leaderboard(ctx.guild)
+    
+    await send_log_reward_config(ctx.guild, ctx.author, "All Rewards Deleted", 0)
+    
+    await safe_reply(ctx, "⚠️ **All** configured rewards have been removed.")
 
 """
 @bot.hybrid_command(name="configpoints", description="Modifies the values of /manualpoints command")
