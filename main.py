@@ -77,14 +77,14 @@ async def on_ready():
 
     guild = discord.Object(id=GUILD_ID_TEST)
 
-    bot.tree.copy_global_to(guild=guild)
-    bot.tree.sync(guild=guild)
-
-    print("Slash commands synced")
-    print([cmd.name for cmd in bot.tree.get_commands()])
-
-    synced = await bot.tree.sync(guild=guild)
-    print("SYNCED: ",[cmd.name for cmd in synced])
+    try:
+        bot.tree.copy_global_to(guild=guild)
+        synced = await bot.tree.sync(guild=guild)
+        print("SYNCED: ", [cmd.name for cmd in synced])
+    except discord.errors.Forbidden:
+        print("⚠️ Error 403: El bot no tiene permisos (applications.commands) para sincronizar en este servidor.")
+    except Exception as e:
+        print(f"⚠️ No se pudieron sincronizar los comandos: {e}")
 
     await start_web_server()
 
