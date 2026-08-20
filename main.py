@@ -14,21 +14,21 @@ from aiohttp import web
 
 # CARGA DE ARCHIVOS
 load_dotenv()
-"""
+#"""
 with open('config.json', 'r') as f:
     config = json.load(f)
-"""
 #"""
+"""
 with open('config_test.json', 'r') as f:
     config = json.load(f)
-#"""
+"""
 
 # VARIABLES GLOBALES
 ENABLE_IMAGE_SYSTEM = False
 CHANNELS = config['channels']
 LEADERBOARD_CHANNEL = config['leaderboard_channel_id']
 
-GUILD_ID_TEST = 761276922059292713
+GUILD_ID_TEST = 1172230578679070751
 
 CHUNK_LINES = 30
 
@@ -1619,3 +1619,4 @@ async def create_tables():
 
 # INICIO DEL BOT
 bot.run(os.getenv("TOKEN"))
+#bot.run(os.getenv("TOKEN_TEST"))
